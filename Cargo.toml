@@ -1,0 +1,21 @@
+[package]
+name = "urlfreezer_client"
+version = "0.1.0"
+edition = "2021"
+type="lib"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde="1.0"
+serde_derive="1.0"
+surf={ version ="2.3", optional=true}
+ureq={ version ="2.3", optional=true , features = ["json"] }
+thiserror="1.0"
+http-types = {version = "2.5", optional=true}
+
+[features]
+blocking=["ureq"]
+async = ["surf", "http-types"]
+default = ["blocking"]
+
