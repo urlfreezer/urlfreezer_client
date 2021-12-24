@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -13,12 +15,24 @@ pub enum Error {
 
     #[error("{0}")]
     Io(#[from] std::io::Error),
+
+    #[cfg(feature = "csv")]
+    #[error("{0}")]
+    CsvError(#[from] csv::Error),
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub enum LinkAction {
     Redirect,
     Content,
+}
+impl Display for LinkAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            &LinkAction::Content => write!(f, "Content"),
+            &LinkAction::Redirect => write!(f, "Redirect"),
+        }
+    }
 }
 
 pub struct LinkInfo {
@@ -154,6 +168,35 @@ pub mod blocking {
                 .into_iter()
                 .next())
         }
+
+        #[cfg(feature = "csv")]
+        pub fn fetch_with_csv(
+            &self,
+            mut data: csv::Reader<impl std::io::Read>,
+            mut out: csv::Writer<impl std::io::Write>,
+        ) -> Result<()> {
+            use super::CsvInRow;
+            use super::CsvOutRow;
+            for rec in data.deserialize::<CsvInRow>() {
+                if let Ok(csv_row) = rec {
+                    let page = if csv_row.page.is_empty() {
+                        None
+                    } else {
+                        Some(csv_row.page.as_str())
+                    };
+                    let label = if csv_row.label.is_empty() {
+                        None
+                    } else {
+                        Some(csv_row.label.as_str())
+                    };
+                    let res = self.fetch_link(&csv_row.link, page, label)?;
+                    if let Some(r) = res {
+                        out.serialize(CsvOutRow::from((csv_row, r)))?;
+                    }
+                }
+            }
+            Ok(())
+        }
     }
 }
 
@@ -161,6 +204,7 @@ pub mod blocking {
 pub mod non_blocking {
     use crate::{FetchLinksV2, FetchedLinksV2, LinkInfo, LinkToFetch, Result};
     use surf::Client as Surf;
+
     pub struct Client {
         host: String,
         user: String,
@@ -207,10 +251,70 @@ pub mod non_blocking {
                 .into_iter()
                 .next())
         }
+
+        #[cfg(feature = "csv")]
+        pub async fn fetch_with_csv(
+            &self,
+            mut data: csv::Reader<impl std::io::Read>,
+            mut out: csv::Writer<impl std::io::Write>,
+        ) -> Result<()> {
+            use super::CsvInRow;
+            use super::CsvOutRow;
+            for rec in data.deserialize::<CsvInRow>() {
+                if let Ok(csv_row) = rec {
+                    let page = if csv_row.page.is_empty() {
+                        None
+                    } else {
+                        Some(csv_row.page.as_str())
+                    };
+                    let label = if csv_row.label.is_empty() {
+                        None
+                    } else {
+                        Some(csv_row.label.as_str())
+                    };
+                    let res = self.fetch_link(&csv_row.link, page, label).await?;
+                    if let Some(r) = res {
+                        out.serialize(CsvOutRow::from((csv_row, r)))?;
+                    }
+                }
+            }
+            Ok(())
+        }
     }
     impl From<surf::Error> for crate::Error {
         fn from(e: surf::Error) -> Self {
             crate::Error::NonBlockingClient(e.to_string())
+        }
+    }
+}
+
+#[cfg(feature = "csv")]
+#[derive(Deserialize)]
+struct CsvInRow {
+    page: String,
+    link: String,
+    label: String,
+}
+
+#[cfg(feature = "csv")]
+#[derive(Serialize)]
+struct CsvOutRow {
+    page: String,
+    original: String,
+    label: String,
+    link: String,
+    action: String,
+}
+
+#[cfg(feature = "csv")]
+impl From<(CsvInRow, LinkInfo)> for CsvOutRow {
+    fn from((r, i): (CsvInRow, LinkInfo)) -> Self {
+        CsvOutRow {
+            page: r.page,
+            original: r.link,
+            label: r.label,
+            link: i.link,
+            action: format!("{}", i.action),
         }
     }
 }

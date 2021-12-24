@@ -13,6 +13,7 @@ surf={ version ="2.3", optional=true}
 ureq={ version ="2.3", optional=true , features = ["json"] }
 thiserror="1.0"
 http-types = {version = "2.5", optional=true}
+csv = { version = "1.1", optional=true}
 
 [dev-dependencies]
 wiremock = "0.5"
