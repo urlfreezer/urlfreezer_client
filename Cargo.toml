@@ -14,6 +14,7 @@ ureq={ version ="2.3", optional=true , features = ["json"] }
 thiserror="1.0"
 http-types = {version = "2.5", optional=true}
 csv = { version = "1.1", optional=true}
+structopt = {version = "0.3" , optional =true}
 
 [dev-dependencies]
 wiremock = "0.5"
@@ -25,4 +26,6 @@ httpmock = "0.6"
 blocking=["ureq"]
 async = ["surf", "http-types"]
 default = ["blocking"]
+cli = ["structopt", "csv", "blocking"]
+
 
