@@ -289,7 +289,7 @@ pub mod non_blocking {
 }
 
 #[cfg(feature = "csv")]
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct CsvInRow {
     page: String,
     link: String,

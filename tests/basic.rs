@@ -1,10 +1,9 @@
-use serde_json::json;
-use urlfreezer_client::LinkAction;
-
 #[async_std::test]
 #[cfg(feature = "async")]
 async fn test_async() {
+    use serde_json::json;
     use urlfreezer_client::non_blocking::Client;
+    use urlfreezer_client::LinkAction;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
     // Start a background HTTP server on a random local port
@@ -41,21 +40,23 @@ async fn test_async() {
 }
 
 #[test]
+#[cfg(feature = "blocking")]
 fn test_blocking() {
     use httpmock::{Method, MockServer};
+    use serde_json::json;
     use urlfreezer_client::blocking::Client;
+    use urlfreezer_client::LinkAction;
     // Start a lightweight mock server.
     let server = MockServer::start();
 
     // Create a mock on the server.
     let _hello_mock = server.mock(|when, then| {
     when.method(Method::POST)
-        .path("/api/fetch_links_v2")
-        ;
+        .path("/api/fetch_links_v2");
     then.status(200)
         .header("content-type", "application/json")
         .json_body(json!({"links":[{"link":"http://exp.com/bla", "link_label":"nana","action":"Redirect","link_id":"ASXDAERERE"}], "base":"https://example.com"}));
-});
+    });
     let url = server.base_url();
     let client = Client::connect_host(&url, "nothing").unwrap();
     let fetched = client
