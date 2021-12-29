@@ -1,4 +1,4 @@
-use csv::{Reader, Writer};
+use csv::{ReaderBuilder, Trim, Writer};
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -32,17 +32,22 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         Client::connect(&cli.user_id)?
     };
+    let mut reader_builder = ReaderBuilder::new();
+    reader_builder.trim(Trim::All).has_headers(true);
     if let Some(f) = cli.input_file {
         if let Some(out) = cli.output_file {
-            client.fetch_with_csv(Reader::from_path(f)?, Writer::from_path(out)?)?;
+            client.fetch_with_csv(reader_builder.from_path(f)?, Writer::from_path(out)?)?;
         } else {
-            client.fetch_with_csv(Reader::from_path(f)?, Writer::from_writer(stdout()))?;
+            client.fetch_with_csv(reader_builder.from_path(f)?, Writer::from_writer(stdout()))?;
         }
     } else {
         if let Some(out) = cli.output_file {
-            client.fetch_with_csv(Reader::from_reader(stdin()), Writer::from_path(out)?)?;
+            client.fetch_with_csv(reader_builder.from_reader(stdin()), Writer::from_path(out)?)?;
         } else {
-            client.fetch_with_csv(Reader::from_reader(stdin()), Writer::from_writer(stdout()))?;
+            client.fetch_with_csv(
+                reader_builder.from_reader(stdin()),
+                Writer::from_writer(stdout()),
+            )?;
         }
     };
 
