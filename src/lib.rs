@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -19,6 +20,9 @@ pub enum Error {
     #[cfg(feature = "csv")]
     #[error("{0}")]
     CsvError(#[from] csv::Error),
+
+    #[error("{0}")]
+    UrlParsing(#[from] url::ParseError),
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
@@ -44,14 +48,14 @@ pub struct LinkInfo {
 }
 
 impl LinkInfo {
-    fn new(base: String, page: Option<String>, l: LinkMatchV2) -> Self {
-        Self {
+    fn new(base: &Url, page: Option<String>, l: LinkMatchV2) -> Result<Self> {
+        Ok(Self {
             original: l.link,
             page,
             label: l.link_label,
             action: l.action,
-            link: format!("{}/{}", base, l.link_id),
-        }
+            link: base.join(&l.link_id)?.to_string(),
+        })
     }
 }
 
@@ -119,9 +123,12 @@ pub mod blocking {
 
     use crate::{FetchLinksV2, FetchedLinksV2, LinkInfo, LinkToFetch, Result};
     use ureq::Agent;
+    use url::Url;
 
     pub struct Client {
-        host: String,
+        #[allow(unused)]
+        host: Url,
+        api_endpoint: String,
         user: String,
         agent: Agent,
     }
@@ -131,8 +138,11 @@ pub mod blocking {
         }
         pub fn connect_host(host: &str, user_id: &str) -> Result<Client> {
             let agent: Agent = ureq::AgentBuilder::new().build();
+            let host = Url::parse(host)?;
+            let api_path = host.clone().join("/api/fetch_links_v2")?.to_string();
             Ok(Client {
-                host: host.to_owned(),
+                host,
+                api_endpoint: api_path,
                 user: user_id.to_owned(),
                 agent,
             })
@@ -146,16 +156,16 @@ pub mod blocking {
             let message = FetchLinksV2::new(self.user.clone(), links, page.map(|s| s.to_owned()));
             let value: FetchedLinksV2 = self
                 .agent
-                .post(&format!("{}/api/fetch_links_v2", self.host))
+                .post(&self.api_endpoint)
                 .send_json(ureq::json!(message))?
                 .into_json()?;
-            let base = value.base;
+            let base = value.base.parse()?;
             let p = page.map(|x| x.to_owned());
             Ok(value
                 .links
                 .into_iter()
-                .map(|l| LinkInfo::new(base.clone(), p.clone(), l))
-                .collect())
+                .map(|l| LinkInfo::new(&base, p.clone(), l))
+                .collect::<Result<Vec<LinkInfo>>>()?)
         }
         pub fn fetch_link(
             &self,
@@ -204,9 +214,12 @@ pub mod blocking {
 pub mod non_blocking {
     use crate::{FetchLinksV2, FetchedLinksV2, LinkInfo, LinkToFetch, Result};
     use surf::Client as Surf;
+    use url::Url;
 
     pub struct Client {
-        host: String,
+        #[allow(unused)]
+        host: Url,
+        api_endpoint: String,
         user: String,
         client: Surf,
     }
@@ -215,8 +228,11 @@ pub mod non_blocking {
             Self::connect_host("https://urlfreezer.com", user_id).await
         }
         pub async fn connect_host(host: &str, user_id: &str) -> Result<Self> {
+            let host = Url::parse(host)?;
+            let dest = host.clone().join("/api/fetch_links_v2")?.to_string();
             Ok(Self {
-                host: host.to_owned(),
+                host,
+                api_endpoint: dest,
                 user: user_id.to_owned(),
                 client: Surf::new(),
             })
@@ -228,16 +244,19 @@ pub mod non_blocking {
             page: Option<&str>,
         ) -> Result<Vec<LinkInfo>> {
             let message = FetchLinksV2::new(self.user.clone(), links, page.map(|s| s.to_owned()));
-            let dest = format!("{}/api/fetch_links_v2", self.host);
-            let mut resp = self.client.post(&dest).body_json(&message)?.await?;
+            let mut resp = self
+                .client
+                .post(&self.api_endpoint)
+                .body_json(&message)?
+                .await?;
             let value: FetchedLinksV2 = resp.body_json().await?;
-            let base = value.base;
+            let base = value.base.parse()?;
             let p = page.map(|x| x.to_owned());
             Ok(value
                 .links
                 .into_iter()
-                .map(|l| LinkInfo::new(base.clone(), p.clone(), l))
-                .collect())
+                .map(|l| LinkInfo::new(&base, p.clone(), l))
+                .collect::<Result<Vec<LinkInfo>>>()?)
         }
         pub async fn fetch_link(
             &self,
